@@ -20,13 +20,13 @@ const geoJsonRegex = /.geojson\b/i;
 class OgcApiItem extends GeoJsonMixin(
   CatalogMemberMixin(CreateModel(GeoJsonCatalogItemTraits))
 ) {
-  static readonly type = "geojson";
+  static readonly type = "ogcapi";
   get type() {
     return OgcApiItem.type;
   }
 
   get typeName() {
-    return i18next.t("models.geoJson.name");
+    return i18next.t("models.ogcApi.name");
   }
 
   protected async customDataLoader(

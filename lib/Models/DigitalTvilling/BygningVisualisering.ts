@@ -1,15 +1,17 @@
-// import BoxGeometry from "terriajs-cesium/Source/Core/BoxGeometry";
-// import Cartesian3 from "terriajs-cesium/Source/Core/Cartesian3";
-// import GeometryInstance from "terriajs-cesium/Source/Core/GeometryInstance";
-// import Matrix4 from "terriajs-cesium/Source/Core/Matrix4";
-// import PolygonGeometry from "terriajs-cesium/Source/Core/PolygonGeometry";
-// import Transforms from "terriajs-cesium/Source/Core/Transforms";
-// import PerInstanceColorAppearance from "terriajs-cesium/Source/Scene/PerInstanceColorAppearance";
-// import Polyline from "terriajs-cesium/Source/Scene/Polyline";
-// import PolylineCollection from "terriajs-cesium/Source/Scene/PolylineCollection";
-// import Primitive from "terriajs-cesium/Source/Scene/Primitive";
-// import Cesium from "../Cesium";
-// import Terria from "../Terria";
+import BoxGeometry from "terriajs-cesium/Source/Core/BoxGeometry";
+import Cartesian3 from "terriajs-cesium/Source/Core/Cartesian3";
+import Geometry from "terriajs-cesium/Source/Core/Geometry";
+import GeometryInstance from "terriajs-cesium/Source/Core/GeometryInstance";
+import Matrix4 from "terriajs-cesium/Source/Core/Matrix4";
+import PolygonGeometry from "terriajs-cesium/Source/Core/PolygonGeometry";
+import SphereGeometry from "terriajs-cesium/Source/Core/SphereGeometry";
+import Transforms from "terriajs-cesium/Source/Core/Transforms";
+import PerInstanceColorAppearance from "terriajs-cesium/Source/Scene/PerInstanceColorAppearance";
+import Polyline from "terriajs-cesium/Source/Scene/Polyline";
+import PolylineCollection from "terriajs-cesium/Source/Scene/PolylineCollection";
+import Primitive from "terriajs-cesium/Source/Scene/Primitive";
+import Cesium from "../Cesium";
+import Terria from "../Terria";
 
 // const degrees = [
 //   5.708237955,  // long
@@ -48,3 +50,18 @@
 //     })
 //   });//({positions: cartesian, extrudedHeight: 3.0})
 // }
+
+export default function drawRegularWaterSurface() {
+  const polygon = new SphereGeometry({ radius: 6356752 - 323 });
+  // const polyModelMatrix = Transforms.eastNorthUpToFixedFrame(cartesian[0])
+  const instance = new GeometryInstance({ geometry: polygon });
+  const primitive = new Primitive({
+    geometryInstances: instance,
+    appearance: new PerInstanceColorAppearance({
+      closed: true,
+      translucent: true
+    })
+  });
+
+  return primitive;
+}
