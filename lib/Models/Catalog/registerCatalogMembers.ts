@@ -57,8 +57,10 @@ import SplitItemReference from "./CatalogReferences/SplitItemReference";
 import UrlReference, {
   UrlToCatalogMemberMapping
 } from "./CatalogReferences/UrlReference";
+import CustomModel from "./DigitalTvilling/Model";
 
 export default function registerCatalogMembers() {
+  CatalogMemberFactory.register(CustomModel.type, CustomModel);
   CatalogMemberFactory.register(CatalogGroup.type, CatalogGroup);
   CatalogMemberFactory.register(StubCatalogItem.type, StubCatalogItem);
   CatalogMemberFactory.register(
