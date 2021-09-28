@@ -20,4 +20,10 @@ export default class CustomModelTraits extends mixTraits(
     name: "Format"
   })
   format?: string;
+  @primitiveTrait({
+    type: "number",
+    name: "Limit",
+    description: "The number of water tiles fetched from OGCAPI"
+  })
+  limit: number = 10;
 }
