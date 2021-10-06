@@ -118,6 +118,7 @@ function MappableMixin<T extends Constructor<Model<MappableTraits>>>(Base: T) {
      * {@see AsyncLoader}
      */
     async loadMapItems(force?: boolean): Promise<Result<void>> {
+      console.log("Whoops, I loaded map items again, hehe");
       try {
         runInAction(() => {
           if (this.shouldShowInitialMessage) {

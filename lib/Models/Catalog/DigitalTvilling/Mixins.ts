@@ -1,5 +1,7 @@
+import { LatLngBounds } from "leaflet";
 import { computed, intercept, observe } from "mobx";
 import Cartesian3 from "terriajs-cesium/Source/Core/Cartesian3";
+import Cartographic from "terriajs-cesium/Source/Core/Cartographic";
 import Color from "terriajs-cesium/Source/Core/Color";
 import JulianDate from "terriajs-cesium/Source/Core/JulianDate";
 import Math from "terriajs-cesium/Source/Core/Math";
@@ -34,6 +36,7 @@ export default function CustomModelMixin<
     private _dataSource: CustomDataSource | undefined;
     private _discreteTimes: DiscreteTimeAsJS[] | undefined;
     private _currentViewRectangle: Rectangle | undefined;
+    private _currentLeafletRectangle: LatLngBounds | undefined;
     private _currentCameraPosition: Cartesian3 | undefined;
     private _limit: number | undefined;
     private _polygons: PolygonGraphics.ConstructorOptions[] | undefined;
@@ -67,36 +70,15 @@ export default function CustomModelMixin<
       );
       let jsonData = await resOGC.json();
 
-      // let xmlData = parseXML(await resSehav.text());
-
-      // let isoTimes: string[] = [];
-      // let times: JulianDate[] = [];
-      // let zLevels: Number[] = xmlData["locationdata"]["data"][1][
-      //   "waterlevel"
-      // ].map((data: any) => {
-      //   times.push(JulianDate.fromIso8601(data["time"]));
-      //   isoTimes.push(data["time"]);
-      //   return Number(data["value"]) / 100 + 44.06;
-      // });
-
-      // this._discreteTimes = isoTimes.map(date => {
-      //   return { time: date, tag: undefined };
-      // });
-
-      // const heightProperty = new SampledProperty(Number);
-      // heightProperty.addSamples(times, zLevels);
       this._limit = this.limit;
-      // this.terria.mainViewer.beforeViewerChanged.addEventListener((event: any) => {
-      //   console.log("Viewer!", event);
-      // })
-      observe(this.terria.mainViewer, "viewerMode", (event: any) => {
-        console.log("Changed viewer somehow", event);
+
+      observe(this.terria.mainViewer, "currentViewer", (event: any) => {
+        // console.log(event.newValue);
         if (event.newValue) {
-          if (event.newValue.toLowerCase() === "cesium") {
+          if (event.newValue.type.toLowerCase() === "cesium") {
             this.terria.cesium?.scene.camera.moveEnd.addEventListener(
               this.LoadOGCDataCesium
             );
-            console.log(this.terria.cesium?.scene.camera.moveEnd);
           } else {
             this.terria.leaflet?.map.on("moveend", this.LoadOGCDataLeaflet);
           }
@@ -109,38 +91,23 @@ export default function CustomModelMixin<
       this.terria.leaflet?.map.on("moveend", this.LoadOGCDataLeaflet);
 
       let polygons = this.createPolygons(jsonData);
-      // let polygons = jsonData["features"].map((feature: any) => {
-      //   const positions: Cartesian3[] = [
-      //     ...feature["geometry"]["coordinates"].map((coordinates: any) => {
-      //       return coordinates.map((cord: any) => {
-      //         return Cartesian3.fromDegrees(cord[0], cord[1]);
-      //       });
-      //     })
-      //   ];
-      //   return {
-      //     hierarchy: positions[0],
-      //     height: 44.06,
-      //     material: Color.BLUE.withAlpha(0.5),
-      //     fill: true,
-      //     outline: true,
-      //     heightReference: HeightReference.NONE
-      //   };
-      // });
+      if (!this._polygons) this._polygons = [];
 
       this._dataSource?.entities.suspendEvents();
       polygons.forEach((polygon: any) => {
-        this._dataSource?.entities.add(
-          new Entity({
-            polygon: new PolygonGraphics(polygon)
-          })
-        );
+        let entity = new Entity({
+          polygon: new PolygonGraphics(polygon)
+        });
+        this._dataSource?.entities.add(entity);
+        this._polygons?.push({ ...polygon, id: entity.id });
       });
       this._dataSource?.entities.resumeEvents();
     }
 
     async LoadOGCDataCesium(event: any) {
-      console.log(event);
+      // console.log(event);
       if (!this.show || !this.terria.cesium) return;
+      console.log("Started loading Cesium Items!");
       let nextRectangle = this.terria.cesium?.scene.camera.computeViewRectangle();
 
       let nextCameraPosition = this.terria.cesium.scene.camera.position;
@@ -158,37 +125,53 @@ export default function CustomModelMixin<
           Math.DEGREES_PER_RADIAN},${nextRectangle.north *
           Math.DEGREES_PER_RADIAN}&limit=${this._limit}`
       );
+      if (!this._polygons) this._polygons = [];
+
+      this._dataSource?.entities.suspendEvents();
+      if (this._currentViewRectangle) {
+        const intersection = Rectangle.intersection(
+          nextRectangle,
+          this._currentViewRectangle
+        );
+        let newPolygons = [];
+        // let removed = 0;
+        for (let i = 0; i < this._polygons.length; i++) {
+          let poly = this._polygons[i] as any;
+          let contained = false;
+          for (let j = 0; j < poly.hierarchy.length; j++) {
+            const element = poly.hierarchy[j];
+            if (
+              intersection &&
+              Rectangle.contains(
+                intersection,
+                Cartographic.fromCartesian(element)
+              )
+            ) {
+              newPolygons.push(poly);
+              contained = true;
+              break;
+            }
+          }
+          if (!contained) {
+            // console.log(poly.id);
+            this._dataSource?.entities.removeById(poly.id);
+            // removed++;
+          }
+        }
+        this._polygons = newPolygons;
+      }
+
       let jsonData = await resOGC.json();
       let polygons = this.createPolygons(jsonData);
 
-      // let polygons = jsonData["features"].map((feature: any) => {
-      //   const positions: Cartesian3[] = [
-      //     ...feature["geometry"]["coordinates"].map((coordinates: any) => {
-      //       return coordinates.map((cord: any) => {
-      //         return Cartesian3.fromDegrees(cord[0], cord[1]);
-      //       });
-      //     })
-      //   ];
-      //   return {
-      //     hierarchy: positions[0],
-      //     height: 44.06,
-      //     material: Color.BLUE.withAlpha(0.5),
-      //     fill: true,
-      //     outline: true,
-      //     heightReference: HeightReference.NONE
-      //   };
-      // });
-      if (!this._polygons) this._polygons = [];
-      this._dataSource?.entities.suspendEvents();
       // this._dataSource?.entities.removeAll();
       polygons.forEach((polygon: any) => {
         const polygonGraphic = new PolygonGraphics(polygon);
-        this._dataSource?.entities.add(
-          new Entity({
-            polygon: polygonGraphic
-          })
-        );
-        this._polygons?.push(polygon);
+        const entity = new Entity({
+          polygon: polygonGraphic
+        });
+        this._dataSource?.entities.add(entity);
+        this._polygons?.push({ ...polygon, id: entity.id });
       });
       this._dataSource?.entities.resumeEvents();
       this._currentViewRectangle = nextRectangle;
@@ -197,33 +180,33 @@ export default function CustomModelMixin<
 
     async LoadOGCDataLeaflet(event: any) {
       if (!this.terria.leaflet || !this.show) return;
-      // console.log(this.terria.leaflet.map.getZoom());
 
       if (this.terria.leaflet.map.getZoom() < 10) return;
 
       const mapView = this.terria.leaflet.map.getBounds();
       const northEast = mapView.getNorthEast();
       const southWest = mapView.getSouthWest();
-      // console.log(mapView);
+
       const resOGC = await fetch(
         `${this._uri}/items?f=json&bbox=${southWest.lng},${southWest.lat},${northEast.lng},${northEast.lat}&limit=${this._limit}`
       );
 
       let jsonData = await resOGC.json();
-      let polygons = this.createPolygons(jsonData);
+      let polygons = this.createPolygons(jsonData, false);
+      if (!this._polygons) this._polygons = [];
       this._dataSource?.entities.suspendEvents();
       this._dataSource?.entities.removeAll();
       polygons.forEach((polygon: any) => {
-        this._dataSource?.entities.add(
-          new Entity({
-            polygon: new PolygonGraphics(polygon)
-          })
-        );
+        let entity = new Entity({
+          polygon: new PolygonGraphics(polygon)
+        });
+        this._dataSource?.entities.add(entity);
+        this._polygons?.push({ ...polygon, id: entity.id });
       });
       this._dataSource?.entities.resumeEvents();
     }
 
-    createPolygons(jsonData: any) {
+    createPolygons(jsonData: any, filter: boolean = true) {
       let data = jsonData["features"].map((feature: any) => {
         let hasHeights = false;
         const positions: Cartesian3[] = [
@@ -231,11 +214,7 @@ export default function CustomModelMixin<
             return coordinates.map((cord: any) => {
               if (cord.length > 2) {
                 hasHeights = true;
-                return Cartesian3.fromDegrees(
-                  cord[0],
-                  cord[1],
-                  cord[2] + 44.06
-                );
+                return Cartesian3.fromDegrees(cord[0], cord[1], cord[2]);
               }
               return Cartesian3.fromDegrees(cord[0], cord[1]);
             });
@@ -250,12 +229,12 @@ export default function CustomModelMixin<
               fill: true,
               outline: true,
               extrudedHeight: 10,
-              heightReference: HeightReference.RELATIVE_TO_GROUND,
-              perPointHeight: true
+              heightReference: HeightReference.NONE,
+              perPositionHeight: true
             }
           : {
               hierarchy: positions[0],
-              height: 44.06,
+              height: 0,
               material: this._color
                 ? Color.fromCssColorString(this._color)
                 : Color.BLUE.withAlpha(0.5),
@@ -265,6 +244,9 @@ export default function CustomModelMixin<
               heightReference: HeightReference.NONE
             };
       });
+
+      if (!filter) return data;
+
       data = data.filter((polygon: any) => {
         if (this._polygons) {
           for (let i = 0; i < this._polygons.length; i++) {
@@ -273,7 +255,6 @@ export default function CustomModelMixin<
                 polygon.hierarchy[0]
               )
             ) {
-              // console.log("Test");
               return false;
             }
           }

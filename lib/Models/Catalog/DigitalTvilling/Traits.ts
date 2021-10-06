@@ -56,12 +56,12 @@ export default class CustomModelTraits extends mixTraits(
     UpperCorner: "6.035,59.11"
   };
 
-  @primitiveTrait({
-    name: "URL",
-    description: "The url for the OGC-API",
-    type: "string"
-  })
-  url: string = "www.example.com";
+  // @primitiveTrait({
+  //   name: "URL",
+  //   description: "The url for the OGC-API",
+  //   type: "string"
+  // })
+  // url: string = "www.example.com";
 
   @primitiveTrait({
     name: "Color",
