@@ -70,4 +70,20 @@ export default class CustomModelTraits extends mixTraits(
     type: "string"
   })
   color?: string;
+
+  @primitiveTrait({
+    type: "number",
+    name: "Sub-sampling West-East",
+    description:
+      "How many times the view rectangle should be split in the west-east direction"
+  })
+  subSampleWestEast: number = 1;
+
+  @primitiveTrait({
+    type: "number",
+    name: "Sub-sampling North-South",
+    description:
+      "How many times the view rectangle should be split in the north-south direction"
+  })
+  subSampleNorthSouth: number = 1;
 }

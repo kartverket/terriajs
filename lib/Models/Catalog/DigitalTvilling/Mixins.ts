@@ -4,7 +4,7 @@ import Cartesian3 from "terriajs-cesium/Source/Core/Cartesian3";
 import Cartographic from "terriajs-cesium/Source/Core/Cartographic";
 import Color from "terriajs-cesium/Source/Core/Color";
 import JulianDate from "terriajs-cesium/Source/Core/JulianDate";
-import Math from "terriajs-cesium/Source/Core/Math";
+import { Math as m } from "terriajs-cesium";
 import PolygonHierarchy from "terriajs-cesium/Source/Core/PolygonHierarchy";
 import Rectangle from "terriajs-cesium/Source/Core/Rectangle";
 import TimeInterval from "terriajs-cesium/Source/Core/TimeInterval";
@@ -34,12 +34,16 @@ export default function CustomModelMixin<
     MappableMixin(UrlMixin(Base))
   ) {
     private _dataSource: CustomDataSource | undefined;
+    private debugSource: CustomDataSource = new CustomDataSource();
+    private debugging: boolean = true;
     private _discreteTimes: DiscreteTimeAsJS[] | undefined;
     private _currentViewRectangle: Rectangle | undefined;
     private _currentLeafletRectangle: LatLngBounds | undefined;
     private _currentCameraPosition: Cartesian3 | undefined;
     private _limit: number | undefined;
     private _polygons: PolygonGraphics.ConstructorOptions[] | undefined;
+    private _subSampleNorthSouth: number = 1;
+    private _subSampleWestEast: number = 1;
     a = 0;
 
     @computed get discreteTimes(): DiscreteTimeAsJS[] | undefined {
@@ -57,6 +61,8 @@ export default function CustomModelMixin<
       this.LoadOGCDataLeaflet = this.LoadOGCDataLeaflet.bind(this);
       this.createPolygons = this.createPolygons.bind(this);
       this._color = this.color;
+      this._subSampleNorthSouth = this.subSampleNorthSouth;
+      this._subSampleWestEast = this.subSampleWestEast;
 
       if (typeof this._dataSource == "undefined") {
         this._dataSource = new CustomDataSource("CustomModelSource");
@@ -80,15 +86,17 @@ export default function CustomModelMixin<
               this.LoadOGCDataCesium
             );
           } else {
-            this.terria.leaflet?.map.on("moveend", this.LoadOGCDataLeaflet);
+            this.terria.leaflet?.map.on("dragend", this.LoadOGCDataLeaflet);
+            this.terria.leaflet?.map.on("zoomend", this.LoadOGCDataLeaflet);
           }
         }
       });
-
+      // this.terria.cesium?.scene.camera.
       this.terria.cesium?.scene.camera.moveEnd.addEventListener(
         this.LoadOGCDataCesium
       );
-      this.terria.leaflet?.map.on("moveend", this.LoadOGCDataLeaflet);
+      this.terria.leaflet?.map.on("dragend", this.LoadOGCDataLeaflet);
+      this.terria.leaflet?.map.on("zoomend", this.LoadOGCDataLeaflet);
 
       let polygons = this.createPolygons(jsonData);
       if (!this._polygons) this._polygons = [];
@@ -116,15 +124,65 @@ export default function CustomModelMixin<
       );
 
       if (cartographicPos.height > 50000 || !nextRectangle) return;
-      console.log("Calls to Server -- ---", this.a++);
+      this.a += this._subSampleNorthSouth * this._subSampleWestEast;
+      console.log("Calls to Server -- ---", this.a);
+      let jsonData = {
+        features: new Array()
+      };
 
-      const resOGC = await fetch(
-        `${this._uri}/items?f=json&bbox=${nextRectangle.west *
-          Math.DEGREES_PER_RADIAN},${nextRectangle.south *
-          Math.DEGREES_PER_RADIAN},${nextRectangle.east *
-          Math.DEGREES_PER_RADIAN},${nextRectangle.north *
-          Math.DEGREES_PER_RADIAN}&limit=${this._limit}`
-      );
+      let promises = [];
+      if (nextRectangle) {
+        let westEastDist = nextRectangle.east - nextRectangle.west;
+        let northSouthDist = nextRectangle.north - nextRectangle.south;
+        this.debugSource.entities.removeAll();
+        for (let i = 0; i < this._subSampleWestEast; i++) {
+          for (let j = 0; j < this._subSampleNorthSouth; j++) {
+            let west =
+              nextRectangle.west + (westEastDist / this._subSampleWestEast) * i;
+            let east =
+              nextRectangle.west +
+              (westEastDist / this._subSampleWestEast) * (i + 1);
+            let south =
+              nextRectangle.south +
+              (northSouthDist / this._subSampleNorthSouth) * j;
+            let north =
+              nextRectangle.south +
+              (northSouthDist / this._subSampleNorthSouth) * (j + 1);
+            const rect = new Rectangle(west, south, east, north);
+
+            promises.push(
+              fetch(
+                `${this._uri}/items?f=json&bbox=${rect.west *
+                  m.DEGREES_PER_RADIAN},${rect.south *
+                  m.DEGREES_PER_RADIAN},${rect.east *
+                  m.DEGREES_PER_RADIAN},${rect.north *
+                  m.DEGREES_PER_RADIAN}&limit=${
+                  this._limit
+                    ? Math.floor(
+                        this._limit /
+                          (this._subSampleNorthSouth * this._subSampleWestEast)
+                      )
+                    : this._limit
+                }`
+              )
+            );
+            if (this.debugging && this.debugSource) {
+              this.debugSource.entities.add(new Entity({ rectangle: rect }));
+            }
+          }
+        }
+      }
+
+      console.log(promises.length);
+
+      await Promise.all(promises);
+      for (let i = 0; i < promises.length; i++) {
+        const promise = promises[i];
+        let features = await (await promise).json();
+        features = features["features"];
+        jsonData.features.push(...features);
+      }
+
       if (!this._polygons) this._polygons = [];
 
       this._dataSource?.entities.suspendEvents();
@@ -134,7 +192,7 @@ export default function CustomModelMixin<
           this._currentViewRectangle
         );
         let newPolygons = [];
-        // let removed = 0;
+
         for (let i = 0; i < this._polygons.length; i++) {
           let poly = this._polygons[i] as any;
           let contained = false;
@@ -153,18 +211,14 @@ export default function CustomModelMixin<
             }
           }
           if (!contained) {
-            // console.log(poly.id);
             this._dataSource?.entities.removeById(poly.id);
-            // removed++;
           }
         }
         this._polygons = newPolygons;
       }
 
-      let jsonData = await resOGC.json();
       let polygons = this.createPolygons(jsonData);
 
-      // this._dataSource?.entities.removeAll();
       polygons.forEach((polygon: any) => {
         const polygonGraphic = new PolygonGraphics(polygon);
         const entity = new Entity({
@@ -266,7 +320,11 @@ export default function CustomModelMixin<
 
     @computed get mapItems(): MapItem[] {
       if (this.isLoadingMapItems || this._dataSource === undefined) return [];
-
+      if (this.debugging && this.debugSource) {
+        this.debugSource.show = this.show;
+        this._dataSource.show = this.show;
+        return [this._dataSource, this.debugSource];
+      }
       this._dataSource.show = this.show;
       return [this._dataSource];
     }
