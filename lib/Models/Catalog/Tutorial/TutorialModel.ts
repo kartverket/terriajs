@@ -21,7 +21,6 @@ export default class TutorialModel extends CatalogMemberMixin(
   }
 
   protected async forceLoadMapItems(): Promise<void> {
-    console.trace("forceLoadMapItems has been called!");
     this._datasource = new CustomDataSource();
     this._datasource.entities.add({
       position: Cartesian3.fromDegrees(5.7331, this.lat, 30),
@@ -38,7 +37,6 @@ export default class TutorialModel extends CatalogMemberMixin(
   }
 
   @computed get mapItems(): MapItem[] {
-    // console.trace();
     if (this.isLoadingMapItems || this._datasource === undefined) return [];
     this._datasource.show = this.show;
     return [this._datasource];
